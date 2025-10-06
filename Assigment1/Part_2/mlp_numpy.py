@@ -16,8 +16,18 @@ class MLP(object):
         """
         # Hint: You can use a loop to create the necessary number of layers and add them to a list.
         # Remember to initialize the weights and biases in each layer.
+        self.layers=[]
+        in_dim=n_inputs
+        for h in n_hidden:
+            self.layers.append(Linear(in_dim,h))
+            self.layers.append(ReLU())
+            in_dim=h
         
-    def forward(self, x):
+        self.layers.append(Linear(in_dim,n_classes))
+        self.softmax=SoftMax()
+        self.criterion=CrossEntropy()
+        
+    def forward(self, x,y=None):
         """
         Predicts the network output from the input by passing it through several layers.
         
@@ -36,10 +46,17 @@ class MLP(object):
         
         # TODO: Implement the forward pass through each layer.
         # Hint: For each layer in your network, you will need to update 'out' to be the layer's output.
+        for layer in self.layers:
+            out=layer.forward(out)
         
-        return out
+        logits=out
+        probs=self.softmax.forward(logits)
+        if y is None:
+            return probs
+        loss=self.criterion.forward(probs,y)
+        return loss,probs
 
-    def backward(self, dout):
+    def backward(self, dout,y):
         """
         Performs the backward propagation pass given the loss gradients.
         
@@ -54,3 +71,11 @@ class MLP(object):
         # Hint: You will need to update 'dout' to be the gradient of the loss with respect to the input of each layer.
         
         # No need to return anything since the gradients are stored in the layers.
+        probs = self.softmax.out       
+        dz = self.criterion.backward(probs, y)
+        grad=self.softmax.backward(dz)
+
+        for layer in reversed(self.layers):
+            grad=layer.backward(grad)
+
+
