@@ -6,7 +6,7 @@ import argparse
 import numpy as np
 import os
 from pytorch_mlp import MLP
-
+import torch
 # Default constants
 DNN_HIDDEN_UNITS_DEFAULT = '20'
 LEARNING_RATE_DEFAULT = 1e-2
@@ -15,7 +15,7 @@ EVAL_FREQ_DEFAULT = 10
 
 FLAGS = None
 
-def accuracy(predictions, targets):
+def accuracy(predictions, labels):
     """
     Computes the prediction accuracy, i.e., the average of correct predictions
     of the network.
@@ -25,6 +25,9 @@ def accuracy(predictions, targets):
     Returns:
         accuracy: scalar float, the accuracy of predictions.
     """
+    predictions = np.argmax(predictions, axis=1)
+    labels = np.argmax(labels, axis=1)
+    accuracy = np.mean(predictions == labels)
     return accuracy
 
 def train():
@@ -33,6 +36,30 @@ def train():
     NOTE: You should the model on the whole test set each eval_freq iterations.
     """
     # YOUR TRAINING CODE GOES HERE
+    model = MLP(FLAGS.n_inputs, FLAGS.dnn_hidden_units, FLAGS.n_classes)
+    optimizer = torch.optim.SGD(model.parameters(), lr=FLAGS.learning_rate)
+    criterion = torch.nn.CrossEntropyLoss()
+    best_accuracy = 0
+    for epoch in range(FLAGS.max_steps):
+        model.train()
+        for i, (inputs, labels) in enumerate(train_data):
+            optimizer.zero_grad()   
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
+            loss.backward() 
+            optimizer.step()
+            if i % FLAGS.eval_freq == 0:
+                model.eval()
+                with torch.no_grad():
+                    outputs = model(inputs)
+                    accuracy = accuracy(outputs, labels)
+                    if accuracy > best_accuracy:
+                        best_accuracy = accuracy
+                        torch.save(model.state_dict(), 'best_model.pth')
+        model.eval()
+        with torch.no_grad():
+            outputs = model(inputs)
+            accuracy = accuracy(outputs, labels)
 
 
 def main():
