@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 import argparse
+import copy
 import numpy as np
 import os
 import torch
@@ -14,6 +15,8 @@ import torchvision.transforms as transforms
 from cnn_model import CNN
 
 # Default constants
+# Attention: Using these default values may lead to overfitting, with train accuracy = 99.58% and test accuracy = 87.38% at epoch 500.
+# Also it takes too long to train 5000 epochs.
 LEARNING_RATE_DEFAULT = 1e-4
 BATCH_SIZE_DEFAULT = 32
 MAX_EPOCHS_DEFAULT = 5000
@@ -21,6 +24,7 @@ EVAL_FREQ_DEFAULT = 500
 OPTIMIZER_DEFAULT = 'ADAM'
 DATA_DIR_DEFAULT = '../Part 1/data'
 
+# Therefore, I choose to use early stop and evaluate more frequently.
 FLAGS = None
 
 def accuracy(predictions, targets):
@@ -48,7 +52,8 @@ def accuracy(predictions, targets):
 
 def train(learning_rate=LEARNING_RATE_DEFAULT, batch_size=BATCH_SIZE_DEFAULT, 
           max_steps=MAX_EPOCHS_DEFAULT, eval_freq=EVAL_FREQ_DEFAULT, 
-          data_dir=DATA_DIR_DEFAULT, return_history=False):
+          data_dir=DATA_DIR_DEFAULT, return_history=False, early_stopping=False,
+          patience=5, min_delta=0.05):
     """
     Performs training and evaluation of CNN model.
     NOTE: You should the model on the whole test set each eval_freq iterations.
@@ -87,6 +92,9 @@ def train(learning_rate=LEARNING_RATE_DEFAULT, batch_size=BATCH_SIZE_DEFAULT,
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     
     history = {'steps': [], 'train_loss': [], 'train_acc': [], 'test_acc': []} if return_history else None
+    best_val_acc = -float('inf')
+    best_state_dict = None
+    epochs_without_improve = 0
     
     for epoch in range(max_steps):
         model.train()
@@ -101,6 +109,10 @@ def train(learning_rate=LEARNING_RATE_DEFAULT, batch_size=BATCH_SIZE_DEFAULT,
             optimizer.step()
             
             running_loss += loss.item()
+        
+        avg_epoch_loss = running_loss / len(trainloader)
+        if (epoch + 1) % 20 == 0 or epoch == 0:
+            print(f'Epoch [{epoch+1}/{max_steps}] training loss: {avg_epoch_loss:.4f}')
         
         if (epoch + 1) % eval_freq == 0 or epoch == max_steps - 1:
             model.eval()
@@ -139,6 +151,21 @@ def train(learning_rate=LEARNING_RATE_DEFAULT, batch_size=BATCH_SIZE_DEFAULT,
             
             print(f'Epoch [{epoch+1}/{max_steps}]')
             print(f'Loss: {avg_loss:.4f}, Train Acc: {train_acc:.2f}%, Test Acc: {test_acc:.2f}%')
+
+            if early_stopping:
+                if test_acc > best_val_acc + min_delta:
+                    best_val_acc = test_acc
+                    best_state_dict = copy.deepcopy(model.state_dict())
+                    epochs_without_improve = 0
+                else:
+                    epochs_without_improve += 1
+                    print(f'No improvement in validation for {epochs_without_improve} eval(s)')
+                    if epochs_without_improve >= patience:
+                        print(f'Early stopping triggered at epoch {epoch+1}')
+                        break
+
+    if early_stopping and best_state_dict is not None:
+        model.load_state_dict(best_state_dict)
     
     if return_history:
         return model, history
