@@ -15,8 +15,6 @@ import torchvision.transforms as transforms
 from cnn_model import CNN
 
 # Default constants
-# Attention: Using these default values may lead to overfitting, with train accuracy = 99.58% and test accuracy = 87.38% at epoch 500.
-# Also it takes too long to train 5000 epochs.
 LEARNING_RATE_DEFAULT = 1e-4
 BATCH_SIZE_DEFAULT = 32
 MAX_EPOCHS_DEFAULT = 5000
@@ -24,7 +22,6 @@ EVAL_FREQ_DEFAULT = 500
 OPTIMIZER_DEFAULT = 'ADAM'
 DATA_DIR_DEFAULT = '../Part 1/data'
 
-# Therefore, I choose to use early stop and evaluate more frequently.
 FLAGS = None
 
 def accuracy(predictions, targets):
@@ -94,75 +91,100 @@ def train(learning_rate=LEARNING_RATE_DEFAULT, batch_size=BATCH_SIZE_DEFAULT,
     history = {'steps': [], 'train_loss': [], 'train_acc': [], 'test_acc': []} if return_history else None
     best_val_acc = -float('inf')
     best_state_dict = None
-    epochs_without_improve = 0
+    evals_without_improve = 0
     
-    for epoch in range(max_steps):
-        model.train()
-        running_loss = 0.0
-        for i, (inputs, labels) in enumerate(trainloader):
-            inputs, labels = inputs.to(device), labels.to(device)
+    # Training loop - iterate by steps instead of epochs
+    model.train()
+    step = 0
+    
+    print(f'Starting training...')
+    print(f'Batch size: {batch_size}')
+    print(f'Learning rate: {learning_rate}')
+    print(f'Max steps: {max_steps}')
+    print(f'Evaluation frequency: {eval_freq}')
+    
+    for epoch in range(max_steps // len(trainloader) + 1):
+        for inputs, labels in trainloader:
+            if step >= max_steps:
+                break
             
+            # Move data to device
+            inputs = inputs.to(device)
+            labels = labels.to(device)
+            
+            # Forward pass
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = criterion(outputs, labels)
+            
+            # Backward pass
             loss.backward()
             optimizer.step()
             
-            running_loss += loss.item()
-        
-        avg_epoch_loss = running_loss / len(trainloader)
-        if (epoch + 1) % 20 == 0 or epoch == 0:
-            print(f'Epoch [{epoch+1}/{max_steps}] training loss: {avg_epoch_loss:.4f}')
-        
-        if (epoch + 1) % eval_freq == 0 or epoch == max_steps - 1:
-            model.eval()
-            train_correct = 0
-            train_total = 0
-            test_correct = 0
-            test_total = 0
-            train_loss_sum = 0.0
+            step += 1
             
-            with torch.no_grad():
-                for inputs, labels in trainloader:
-                    inputs, labels = inputs.to(device), labels.to(device)
-                    outputs = model(inputs)
-                    loss = criterion(outputs, labels)
-                    train_loss_sum += loss.item()
-                    _, predicted = outputs.max(1)
-                    train_total += labels.size(0)
-                    train_correct += predicted.eq(labels).sum().item()
+            # Print training loss every 20 steps
+            if step % 20 == 0 or step == 1:
+                print(f'Step {step}: Training loss: {loss.item():.4f}')
+            
+            # Evaluate on test set
+            if step % eval_freq == 0 or step == max_steps:
+                model.eval()
+                train_correct = 0
+                train_total = 0
+                test_correct = 0
+                test_total = 0
+                train_loss_sum = 0.0
                 
-                for inputs, labels in testloader:
-                    inputs, labels = inputs.to(device), labels.to(device)
-                    outputs = model(inputs)
-                    _, predicted = outputs.max(1)
-                    test_total += labels.size(0)
-                    test_correct += predicted.eq(labels).sum().item()
-            
-            train_acc = 100. * train_correct / train_total
-            test_acc = 100. * test_correct / test_total
-            avg_loss = train_loss_sum / len(trainloader)
-            
-            if return_history:
-                history['steps'].append(epoch + 1)
-                history['train_loss'].append(avg_loss)
-                history['train_acc'].append(train_acc)
-                history['test_acc'].append(test_acc)
-            
-            print(f'Epoch [{epoch+1}/{max_steps}]')
-            print(f'Loss: {avg_loss:.4f}, Train Acc: {train_acc:.2f}%, Test Acc: {test_acc:.2f}%')
-
-            if early_stopping:
-                if test_acc > best_val_acc + min_delta:
-                    best_val_acc = test_acc
-                    best_state_dict = copy.deepcopy(model.state_dict())
-                    epochs_without_improve = 0
-                else:
-                    epochs_without_improve += 1
-                    print(f'No improvement in validation for {epochs_without_improve} eval(s)')
-                    if epochs_without_improve >= patience:
-                        print(f'Early stopping triggered at epoch {epoch+1}')
-                        break
+                with torch.no_grad():
+                    for train_inputs, train_labels in trainloader:
+                        train_inputs = train_inputs.to(device)
+                        train_labels = train_labels.to(device)
+                        
+                        train_outputs = model(train_inputs)
+                        train_loss_sum += criterion(train_outputs, train_labels).item()
+                        _, predicted = train_outputs.max(1)
+                        train_total += train_labels.size(0)
+                        train_correct += predicted.eq(train_labels).sum().item()
+                    
+                    for test_inputs, test_labels in testloader:
+                        test_inputs = test_inputs.to(device)
+                        test_labels = test_labels.to(device)
+                        
+                        test_outputs = model(test_inputs)
+                        _, predicted = test_outputs.max(1)
+                        test_total += test_labels.size(0)
+                        test_correct += predicted.eq(test_labels).sum().item()
+                
+                train_acc = 100. * train_correct / train_total
+                test_acc = 100. * test_correct / test_total
+                avg_loss = train_loss_sum / len(trainloader)
+                
+                if return_history:
+                    history['steps'].append(step)
+                    history['train_loss'].append(avg_loss)
+                    history['train_acc'].append(train_acc)
+                    history['test_acc'].append(test_acc)
+                
+                print(f'Step {step}: Loss: {avg_loss:.4f}, Train Acc: {train_acc:.2f}%, Test Acc: {test_acc:.2f}%')
+                
+                if early_stopping:
+                    if test_acc > best_val_acc + min_delta:
+                        best_val_acc = test_acc
+                        best_state_dict = copy.deepcopy(model.state_dict())
+                        evals_without_improve = 0
+                    else:
+                        evals_without_improve += 1
+                        print(f'No improvement in validation for {evals_without_improve} eval(s)')
+                        if evals_without_improve >= patience:
+                            print(f'Early stopping triggered at step {step}')
+                            step = max_steps  # Force exit from outer loop
+                            break
+                
+                model.train()
+        
+        if step >= max_steps:
+            break
 
     if early_stopping and best_state_dict is not None:
         model.load_state_dict(best_state_dict)
@@ -176,7 +198,8 @@ def main():
     Main function
     """
     train(learning_rate=FLAGS.learning_rate, batch_size=FLAGS.batch_size,
-          max_steps=FLAGS.max_steps, eval_freq=FLAGS.eval_freq, data_dir=FLAGS.data_dir)
+          max_steps=FLAGS.max_steps, eval_freq=FLAGS.eval_freq, data_dir=FLAGS.data_dir,
+          early_stopping=FLAGS.early_stopping, patience=FLAGS.patience, min_delta=FLAGS.min_delta)
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
@@ -190,6 +213,12 @@ if __name__ == '__main__':
                         help='Frequency of evaluation on the test set')
   parser.add_argument('--data_dir', type = str, default = DATA_DIR_DEFAULT,
                       help='Directory for storing input data')
+  parser.add_argument('--early_stopping', action='store_true',
+                      help='Enable early stopping based on validation accuracy')
+  parser.add_argument('--patience', type=int, default=5,
+                      help='Number of evaluations to wait before early stopping')
+  parser.add_argument('--min_delta', type=float, default=0.05,
+                      help='Minimum change in validation accuracy to qualify as an improvement')
   FLAGS, unparsed = parser.parse_known_args()
 
   main()

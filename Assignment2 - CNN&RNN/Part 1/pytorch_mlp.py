@@ -29,7 +29,8 @@ class MLP(nn.Module):
             out: output of the network
         """
         out = x
-        for layer in self.layers:
+        for i, layer in enumerate(self.layers):
             out = layer(out)
-            out = torch.relu(out)
+            if i < len(self.layers) - 1:
+                out = torch.relu(out)
         return out
