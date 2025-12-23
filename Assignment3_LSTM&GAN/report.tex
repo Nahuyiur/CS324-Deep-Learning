@@ -79,6 +79,15 @@ I trained the LSTM for each sequence length and compared its performance with th
 
 For a short sequence length ($T=5$), the LSTM achieves perfect accuracy (Train Acc=1.0000, Val Acc=1.0000). More importantly, the LSTM maintains this perfect performance across all tested lengths up to $T=30$.
 
+Figure~\ref{fig:t5-curves} shows the per-epoch loss and accuracy trajectories for the $T=5$ experiment. Both training and validation losses decrease smoothly and their accuracies rapidly approach unity, confirming that the model converges reliably even with a modest dataset size. The curves are lightly down-sampled (every two epochs) to keep the visualization clear.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\linewidth]{"Part 1/t5_training_curves.png"}
+    \caption{Training/validation loss and accuracy for $T=5$. Down-sampled points illustrate the stable convergence towards perfect accuracy.}
+    \label{fig:t5-curves}
+\end{figure}
+
 As shown in Figure \ref{fig:lstm-vs-rnn}, the LSTM significantly outperforms the vanilla RNN, especially as the sequence length increases. The vanilla RNN's accuracy drops drastically for $T \ge 20$ due to the vanishing gradient problem. The LSTM, equipped with gating mechanisms, effectively mitigates this issue and successfully learns long-term dependencies.
 
 \begin{figure}[htbp]
@@ -150,6 +159,24 @@ The training proceeds in two steps for each batch:
 
 I use the Adam optimizer with learning rate 0.0002 and betas (0.5, 0.999) for both networks. The training runs for 100 epochs.
 
+Figure~\ref{fig:gan-losses} summarizes how the discriminator and generator losses evolve throughout training. The discriminator initially learns faster, causing the generator loss to spike, but the two curves gradually stabilize and oscillate within a reasonable band, indicating that the adversarial game has reached a rough equilibrium. The smoothing overlay highlights the long-term trends beyond the noisy per-iteration fluctuations.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\linewidth]{"Part 2/gan_training_losses.png"}
+    \caption{Training loss trajectory of the GAN. The solid lines show raw measurements while the smoother curves reveal the overall trend as training converges.}
+    \label{fig:gan-losses}
+\end{figure}
+
+Complementing the loss curves, Figure~\ref{fig:gan-accuracy} tracks the discriminator and generator accuracies. The discriminator settles around $60$--$70\%$ on both real and fake inputs while maintaining a modest gap, which is typical for a balanced GAN where neither player dominates completely. The generator's fooling rate plateaus near $30\%$, reflecting that it consistently produces samples that are occasionally convincing but still leaves room for improvement (e.g., by increasing model capacity or training time).
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.95\linewidth]{"Part 2/accuracy.png"}
+    \caption{Rolling-mean accuracy curves. Left: discriminator real/fake accuracies and their gap. Right: generator bluffing rate with instantaneous and smoothed trends.}
+    \label{fig:gan-accuracy}
+\end{figure}
+
 \subsection{Task 2: Generated Samples}
 Figure \ref{fig:gan-samples} shows the progression of generated images during training. 
 
@@ -198,9 +225,10 @@ Figure \ref{fig:interpolation} displays the transition between two distinct digi
 
 This smooth transformation confirms that the generator has learned the underlying manifold of the handwritten digits, allowing it to generalize to unseen data points within the latent space.
 
-\begin{figure}[htbp]
+\begin{figure}[H]
     \centering
-    \includegraphics[width=\linewidth]{"Part 2/interpolation_result.png"}
+    \vspace{-1em}
+    \includegraphics[width=0.9\linewidth]{"Part 2/interpolation_result.png"}
     \caption{Interpolation between two digits in the latent space. The smooth transition indicates that the generator has learned the manifold of handwritten digits.}
     \label{fig:interpolation}
 \end{figure}
